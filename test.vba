@@ -158,6 +158,127 @@ Sub AdjustConflicts(schedule() As Variant, ByVal weekIndex As Integer, employees
     Loop
 End Sub
 
+Function GenerateScheduleV2(employees As Variant, project As Variant) As Variant
+    ' 初始化结果数组
+    Dim schedule() As Variant
+    ReDim schedule(1 To 4, 1 To 4) ' 每4周一个周期，每周4个项目
+
+    Dim currentPosition(1 To 4) As Integer ' 跟踪每组当前的位置
+    
+    For i = 1 To 4
+        currentPosition(i) = 1
+    Next i
+    
+    For weekIndex = 1 To 4
+        For projectNum = 1 To 4 ' A=1, B=2, C=3, D=4
+            Dim projectChar As String
+            projectChar = project(projectNum)  ' 转换为A,B,C,D
+            
+            Dim found As Boolean
+            found = False
+            Dim attempts As Integer
+            attempts = 0
+            
+            ' 尝试找到合适的人员
+            Do While Not found And attempts < 4
+                Dim candidateIndex As Integer
+                candidateIndex = currentPosition(projectNum)
+                
+                ' 检查候选人是否适合该项目
+                If IsEmployeeSuitable(employees(candidateIndex), projectChar) Then
+                    schedule(weekIndex, projectNum) = candidateIndex
+                    found = True
+                    ' 移动到下一个位置
+                    currentPosition(projectNum) = currentPosition(projectNum) + 1
+                    If currentPosition(projectNum) > 4 Then currentPosition(projectNum) = 1
+                Else
+                    ' 尝试下一个候选人
+                    currentPosition(projectNum) = currentPosition(projectNum) + 1
+                    If currentPosition(projectNum) > 4 Then currentPosition(projectNum) = 1
+                    attempts = attempts + 1
+                End If
+            Loop
+            
+            ' 如果没有找到合适的人，选择第一个可以的人（应该不会发生，如果输入合理）
+            If Not found Then
+                For i = 1 To 4
+                    candidateIndex = i
+                    If IsEmployeeSuitable(employees(candidateIndex), projectChar) Then
+                        schedule(weekIndex, projectNum) = candidateIndex
+                        currentPosition(projectNum) = i + 1
+                        If currentPosition(projectNum) > 4 Then currentPosition(projectNum) = 1
+                        Exit For
+                    End If
+                Next i
+            End If
+        Next projectNum
+        
+        ' 如果同一人被分配到多个项目，需要调整（简化处理）
+        AdjustConflictsV2 schedule, weekIndex, employees, project
+    Next weekIndex
+    
+    GenerateSchedule = schedule
+End Function
+
+
+Sub AdjustConflictsV2(schedule() As Variant, weekIdx As Integer, employees As Variant, project As Variant)
+    ' 检查并解决同一人被分配到多个项目的冲突
+    Dim usedEmployees(1 To 4) As Boolean
+    Dim conflicts As Boolean
+    conflicts = True
+    
+    ' 尝试解决冲突（最多尝试4次）
+    Dim attempts As Integer
+    attempts = 0
+    
+    Do While conflicts And attempts < 10
+        conflicts = False
+        Erase usedEmployees
+        
+        For projectNum = 1 To 4
+            Dim empIndex As Integer
+            empIndex = schedule(weekIdx, projectNum)
+            
+            If empIndex >= 1 And empIndex <= 4 Then
+                If usedEmployees(empIndex) Then
+                    ' 冲突发生，尝试为该项目找到下一个合适的人
+                    conflicts = True
+                    Dim originalPos As Integer
+                    originalPos = empIndex
+                    
+                    Dim foundAlternative As Boolean
+                    foundAlternative = False
+                    Dim tryCount As Integer
+                    tryCount = 0
+                    
+                    Do While Not foundAlternative And tryCount < 10
+                        originalPos = originalPos + 1
+                        If originalPos > 4 Then originalPos = 1
+                        
+                        If Not usedEmployees(originalPos) Then
+                            Dim projectChar As String
+                            projectChar = project(projectNum)
+                            
+                            If IsEmployeeSuitable(employees(originalPos), projectChar) Then
+                                schedule(weekIdx, projectNum) = originalPos
+                                foundAlternative = True
+                            End If
+                        End If
+                        
+                        tryCount = tryCount + 1
+                    Loop
+                End If
+                
+                If Not conflicts Then
+                    usedEmployees(empIndex) = True
+                End If
+            End If
+        Next projectNum
+        
+        attempts = attempts + 1
+    Loop
+End Sub
+
 Sub GenerateRoster()
     ' 从Excel读取员工数据 (假设在Sheet1的A1:C4范围)
     Dim employeeRange As Range
@@ -203,13 +324,13 @@ Sub TestScheduleGenerator()
     ' 示例员工数组 (8个员工，前4个是第一组，后4个是第二组)
     Dim employees(1 To 16) As Variant
     ' 员工1: 可以值班A,B,C
-    employees(1) = Array("A", "B", "C")
+    employees(1) = Array("D")
     ' 员工2: 可以值班A,B,C,D (无限制)
     employees(2) = Empty
     ' 员工3: 可以值班B,C,D
-    employees(3) = Array("B", "C", "D")
+    employees(3) = Array("A", "B", "C", "D")
     ' 员工4: 只能值班D
-    employees(4) = Array("D")
+    employees(4) = Array("A", "C", "D")
     ' 第二组员工...
     employees(5) = Array("A", "B", "C", "D")
     employees(6) = Array("A", "B", "C", "D")
